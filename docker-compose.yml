@@ -12,15 +12,8 @@ services:
 
   api:
     build: ./api
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/expense_tracker
-    volumes:
-      - ./api:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env
 
 volumes:
   pgdata:
