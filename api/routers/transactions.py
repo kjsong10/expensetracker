@@ -3,8 +3,9 @@ from sqlmodel import Session, select
 from typing import List
 
 from database import get_session
+from ml.classifier import predict_category
 from models import Transaction
-from schemas.transaction import TransactionCreate
+from schemas.transaction import CategoryPrediction, CategoryPredictionRequest, TransactionCreate
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -14,9 +15,19 @@ def list_transactions(session: Session = Depends(get_session)):
     return session.exec(select(Transaction)).all()
 
 
+@router.post("/predict-category", response_model=CategoryPrediction)
+def predict_transaction_category(payload: CategoryPredictionRequest):
+    category, confidence = predict_category(payload.merchant)
+    return CategoryPrediction(category=category, confidence=confidence)
+
+
 @router.post("/create", response_model=Transaction)
 def create_transaction(payload: TransactionCreate, session: Session = Depends(get_session)):
-    transaction = Transaction.model_validate(payload)
+    data = payload.model_dump()
+    if not data.get("category"):
+        data["category"], _ = predict_category(payload.merchant)
+
+    transaction = Transaction.model_validate(data)
     session.add(transaction)
     session.commit()
     session.refresh(transaction)

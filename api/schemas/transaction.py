@@ -8,3 +8,12 @@ class TransactionCreate(BaseModel):
     merchant: str
     amount: float
     category: Optional[str] = None
+
+
+class CategoryPredictionRequest(BaseModel):
+    merchant: str
+
+
+class CategoryPrediction(BaseModel):
+    category: str
+    confidence: float

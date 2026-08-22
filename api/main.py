@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
+from ml.classifier import train_classifier
 from routers import transactions
 
 app = FastAPI(title="Expense Tracker API")
@@ -19,6 +20,7 @@ app.include_router(transactions.router)
 @app.on_event("startup")
 def on_startup():
     init_db()
+    train_classifier()
 
 
 @app.get("/")

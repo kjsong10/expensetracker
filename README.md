@@ -21,6 +21,7 @@ Then visit:
 - `api/database.py` — SQLModel engine/session setup
 - `api/models/transaction.py` — the `Transaction` table
 - `api/routers/transactions.py` — CRUD endpoints
+- `api/ml/classifier.py` — scikit-learn Pipeline that predicts a transaction's category from its merchant
 - `frontend/src/App.jsx` — the UI: transaction list + add-transaction form
 - `frontend/src/api.js` — API client used by the UI
 

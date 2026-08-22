@@ -1,0 +1,151 @@
+merchant,category
+Whole Foods Market,Groceries
+TRADER JOE'S #123,Groceries
+Safeway Store 0456,Groceries
+KROGER #789,Groceries
+Costco Wholesale,Groceries
+ALDI 5512,Groceries
+Publix Super Mkt,Groceries
+WALMART GROCERY,Groceries
+Sprouts Farmers Mkt,Groceries
+H-E-B #234,Groceries
+Stop & Shop,Groceries
+Giant Food Stores,Groceries
+Wegmans Food Mkt,Groceries
+Whole Foods Mkt #10289,Groceries
+QFC #123,Groceries
+STARBUCKS STORE #1234,Dining
+SQ *BLUE BOTTLE COFFEE,Dining
+MCDONALD'S #5567,Dining
+CHIPOTLE ONLINE,Dining
+PANERA BREAD #445,Dining
+TST* THE LOCAL DINER,Dining
+DOORDASH*CHIPOTLE,Dining
+UBEREATS*MCDONALDS,Dining
+Sweetgreen,Dining
+Shake Shack #212,Dining
+Domino's Pizza #3345,Dining
+TACO BELL #2231,Dining
+Dunkin' #341087,Dining
+Five Guys Burgers,Dining
+OLIVE GARDEN 00456,Dining
+Uber Trip HELP.UBER.COM,Transportation
+LYFT *RIDE THU 9PM,Transportation
+SHELL OIL 5744201,Transportation
+CHEVRON 0092123,Transportation
+EXXONMOBIL 98771234,Transportation
+76 - GAS STATION,Transportation
+BP#9834556,Transportation
+Metro Transit Fare,Transportation
+SFMTA PARKING,Transportation
+CITY PARKING METER,Transportation
+Speedway #4521,Transportation
+Circle K #778,Transportation
+TESLA SUPERCHARGER,Transportation
+Enterprise Rent-A-Car,Transportation
+AVIS RENT A CAR,Transportation
+AMAZON MKTPL*2K3F,Shopping
+AMZN Mktp US*A19D,Shopping
+TARGET T-1234,Shopping
+WALMART.COM 8004926,Shopping
+BEST BUY #532,Shopping
+ETSY.COM - AUX,Shopping
+EBAY O*12-34567,Shopping
+NORDSTROM #0034,Shopping
+MACY'S #0091,Shopping
+IKEA - RENTON,Shopping
+HOME DEPOT #4501,Shopping
+LOWE'S #1900,Shopping
+ZARA USA 00123,Shopping
+H&M US 0341,Shopping
+TJMAXX #0921,Shopping
+NETFLIX.COM,Entertainment
+SPOTIFY USA,Entertainment
+AMC 24 THEATERS,Entertainment
+REGAL CINEMAS 0087,Entertainment
+STEAMGAMES.COM,Entertainment
+PLAYSTATION NETWORK,Entertainment
+Disney Plus,Entertainment
+HULU 799 CA,Entertainment
+TICKETMASTER 8005,Entertainment
+DAVE & BUSTERS,Entertainment
+AMC #1234,Entertainment
+XBOX GAME PASS,Entertainment
+HBO MAX,Entertainment
+BOWLERO CORP,Entertainment
+TOP GOLF,Entertainment
+PG&E WEB ONLINE,Utilities
+COMCAST CABLE COMM,Utilities
+AT&T *PAYMENT,Utilities
+VERIZON WIRELESS PAYMT,Utilities
+CON EDISON PAYMENT,Utilities
+National Grid Payment,Utilities
+XFINITY MOBILE,Utilities
+SPECTRUM 855-707,Utilities
+DUKE ENERGY PMT,Utilities
+WATER DEPT UTILITY BILL,Utilities
+T-MOBILE PCS PAYMENT,Utilities
+City of Austin Utility,Utilities
+SDGE PAYMENT,Utilities
+WM TRASH SERVICE,Utilities
+GOOGLE FI,Utilities
+CVS/PHARMACY #05612,Health
+WALGREENS #2314,Health
+KAISER PERMANENTE,Health
+RITE AID 06712,Health
+PLANET FITNESS,Health
+LA FITNESS #445,Health
+24 HOUR FITNESS,Health
+QUEST DIAGNOSTICS,Health
+WEBMD HEALTH,Health
+CIGNA HEALTHCARE PMT,Health
+ANTHEM BCBS PAYMENT,Health
+GNC #4521,Health
+VITAMIN SHOPPE,Health
+UNITEDHEALTH PREMIUM,Health
+DENTAL CARE ASSOC,Health
+DELTA AIR 0067891234,Travel
+UNITED AIRLINES,Travel
+SOUTHWEST AIR 526,Travel
+MARRIOTT HOTELS,Travel
+HILTON HOTELS RES,Travel
+AIRBNB * HMXY123,Travel
+BOOKING.COM,Travel
+EXPEDIA TRAVEL,Travel
+HERTZ RENT A CAR,Travel
+JETBLUE AIRWAYS,Travel
+HYATT HOTELS,Travel
+TSA PRECHECK APP,Travel
+AMTRAK TICKET,Travel
+ALASKA AIR,Travel
+FRONTIER AIRLINES,Travel
+ADOBE CREATIVE CLOUD,Subscriptions
+MICROSOFT 365,Subscriptions
+APPLE.COM/BILL,Subscriptions
+GOOGLE *YOUTUBE PREMIUM,Subscriptions
+DROPBOX*SUBSCRIPTION,Subscriptions
+NYTIMES SUBSCRIPTION,Subscriptions
+AMAZON PRIME,Subscriptions
+ICLOUD STORAGE,Subscriptions
+PATREON MEMBERSHIP,Subscriptions
+LINKEDIN PREMIUM,Subscriptions
+ZOOM.US SUBSCRIPTION,Subscriptions
+PELOTON MEMBERSHIP,Subscriptions
+AUDIBLE MEMBERSHIP,Subscriptions
+HEADSPACE SUBSCRIPTION,Subscriptions
+GITHUB SUBSCRIPTION,Subscriptions
+ATM WITHDRAWAL FEE,Other
+VENMO PAYMENT,Other
+ZELLE TRANSFER,Other
+PAYPAL TRANSFER,Other
+WIRE TRANSFER FEE,Other
+BANK SERVICE CHARGE,Other
+IRS TAX PAYMENT,Other
+DMV VEHICLE REG FEE,Other
+USPS POSTAGE,Other
+UPS STORE #221,Other
+FEDEX OFFICE PRINT,Other
+NOTARY SERVICE FEE,Other
+GOFUNDME DONATION,Other
+CHARITY DONATION,Other
+MISC MERCHANT PURCHASE,Other
