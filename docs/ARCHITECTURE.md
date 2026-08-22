@@ -26,9 +26,12 @@ api/
   requirements.txt
   Dockerfile
 frontend/
-  src/api.js                Thin fetch wrapper around the API
-  src/App.jsx                Single top-level component: list + add-transaction form
-  src/App.css, index.css     Styling (light/dark aware, CSS custom properties)
+  src/api.js                        Thin fetch wrapper around the API
+  src/App.jsx                       Container: owns state, wires components together
+  src/components/TransactionSummary.jsx   Count + total line
+  src/components/TransactionForm.jsx      Add-transaction form (owns its own field state)
+  src/components/TransactionList.jsx      Transaction table
+  src/App.css, index.css            Styling (light/dark aware, CSS custom properties)
   Dockerfile
 docker-compose.yml           Wires db + api + frontend together for local dev
 docs/ARCHITECTURE.md         This file
@@ -103,7 +106,10 @@ The brief was "a simple frontend." The app is one screen with one list and one f
 ### 4.2 Structure
 
 - `src/api.js` — the only place that knows the API's base URL or fetch semantics. `listTransactions()` / `createTransaction()` are the two calls the UI needs; if the API grows, new functions get added here rather than components calling `fetch` directly, so there's one place to add auth headers or error handling later.
-- `src/App.jsx` — fetches the list on mount, renders a form and a table, and re-fetches after a successful create rather than optimistically appending the new row. For a low-traffic single-user tool, the extra round-trip is cheap and it guarantees the displayed list always matches what the server actually persisted (e.g. reflects server-side validation or defaulting), which matters more than shaving one network call.
+- `src/App.jsx` is a **container component**: it owns all state (`transactions`, `loading`, `submitting`, `error`) and the two operations that touch the API (`refresh`, `handleCreate`), then hands data and callbacks down to three presentational children under `src/components/`. It fetches the list on mount and re-fetches after a successful create rather than optimistically appending the new row — for a low-traffic single-user tool, the extra round-trip is cheap and it guarantees the displayed list always matches what the server actually persisted (e.g. reflects the classifier's auto-filled category), which matters more than shaving one network call.
+- `TransactionSummary` / `TransactionForm` / `TransactionList` — split out of what was originally one file once the file started mixing three concerns (a summary line, a stateful form, a data table) that don't share markup or logic. `TransactionForm` deliberately keeps its own field state locally rather than lifting it into `App` — nothing outside the form cares about in-progress keystrokes, only the finished payload on submit (`onCreate(payload) -> Promise<boolean>`), and the returned boolean tells the form whether to clear itself, without `App` needing to know anything about the form's internal shape.
+- **Why not a custom hook (`useTransactions`) or Context instead**: both would solve a problem this app doesn't have yet — sharing transaction state across *multiple, unrelated* components. Right now exactly one component tree needs it, so passing state down as props from `App` is the simplest thing that works; a hook/Context is worth it once a second screen or a deeply nested consumer shows up.
+- **Why one shared `App.css` instead of per-component stylesheets/CSS modules**: the components share the same visual language (`.card`, `.muted`, `.amount`, etc.) defined once; splitting styles per component now would mean duplicating or importing across files for zero isolation benefit at this size.
 
 ### 4.3 Configuration
 

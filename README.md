@@ -22,7 +22,8 @@ Then visit:
 - `api/models/transaction.py` — the `Transaction` table
 - `api/routers/transactions.py` — CRUD endpoints
 - `api/ml/classifier.py` — scikit-learn Pipeline that predicts a transaction's category from its merchant
-- `frontend/src/App.jsx` — the UI: transaction list + add-transaction form
+- `frontend/src/App.jsx` — container: state + data fetching
+- `frontend/src/components/` — `TransactionSummary`, `TransactionForm`, `TransactionList`
 - `frontend/src/api.js` — API client used by the UI
 
 ## Next steps
