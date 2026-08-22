@@ -9,15 +9,13 @@ from schemas.transaction import TransactionCreate
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
-@router.get("/", response_model=List[Transaction])
+@router.get("/list", response_model=List[Transaction])
 def list_transactions(session: Session = Depends(get_session)):
     return session.exec(select(Transaction)).all()
 
 
-@router.post("/", response_model=Transaction)
-def create_transaction(
-    payload: TransactionCreate, session: Session = Depends(get_session)
-):
+@router.post("/create", response_model=Transaction)
+def create_transaction(payload: TransactionCreate, session: Session = Depends(get_session)):
     transaction = Transaction.model_validate(payload)
     session.add(transaction)
     session.commit()
