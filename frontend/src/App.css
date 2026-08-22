@@ -86,3 +86,64 @@ th {
   margin-bottom: 20px;
   font-size: 14px;
 }
+
+.error-inline {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.user-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.user-picker-row select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+}
+
+.user-picker-new {
+  display: flex;
+  gap: 8px;
+}
+
+.user-picker-new input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.plaid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.plaid-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.plaid-action button,
+.user-picker-new button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plaid-action button:disabled,
+.user-picker-new button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

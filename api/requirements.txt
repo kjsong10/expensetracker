@@ -3,3 +3,4 @@ uvicorn[standard]
 sqlmodel
 psycopg2-binary
 scikit-learn
+plaid-python

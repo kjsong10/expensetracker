@@ -1,0 +1,40 @@
+import { useCallback, useEffect, useState } from 'react'
+import { usePlaidLink } from 'react-plaid-link'
+import { createLinkToken, exchangePublicToken, syncTransactions } from '../api'
+
+export default function PlaidLinkButton({ userId, onConnected }) {
+  const [linkToken, setLinkToken] = useState(null)
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    setLinkToken(null)
+    createLinkToken(userId)
+      .then((res) => setLinkToken(res.link_token))
+      .catch((err) => setError(err.message))
+  }, [userId])
+
+  const onSuccess = useCallback(
+    (publicToken) => {
+      setConnecting(true)
+      setError(null)
+      exchangePublicToken(userId, publicToken)
+        .then(() => syncTransactions(userId))
+        .then(() => onConnected())
+        .catch((err) => setError(err.message))
+        .finally(() => setConnecting(false))
+    },
+    [userId, onConnected]
+  )
+
+  const { open, ready } = usePlaidLink({ token: linkToken, onSuccess })
+
+  return (
+    <div className="plaid-action">
+      <button onClick={() => open()} disabled={!ready || connecting}>
+        {connecting ? 'Connecting…' : 'Connect a bank'}
+      </button>
+      {error && <span className="error-inline">{error}</span>}
+    </div>
+  )
+}

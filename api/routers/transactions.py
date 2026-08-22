@@ -11,8 +11,8 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
 @router.get("/list", response_model=List[Transaction])
-def list_transactions(session: Session = Depends(get_session)):
-    return session.exec(select(Transaction)).all()
+def list_transactions(user_id: int, session: Session = Depends(get_session)):
+    return session.exec(select(Transaction).where(Transaction.user_id == user_id)).all()
 
 
 @router.post("/predict-category", response_model=CategoryPrediction)
