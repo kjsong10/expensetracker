@@ -1,18 +1,22 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from typing import List
 
+from auth import get_current_user
 from database import get_session
 from ml.classifier import predict_category
-from models import Transaction
+from models import Transaction, User
 from schemas.transaction import CategoryPrediction, CategoryPredictionRequest, TransactionCreate
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
 @router.get("/list", response_model=List[Transaction])
-def list_transactions(user_id: int, session: Session = Depends(get_session)):
-    return session.exec(select(Transaction).where(Transaction.user_id == user_id)).all()
+def list_transactions(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    return session.exec(select(Transaction).where(Transaction.user_id == current_user.id)).all()
 
 
 @router.post("/predict-category", response_model=CategoryPrediction)
@@ -22,10 +26,15 @@ def predict_transaction_category(payload: CategoryPredictionRequest):
 
 
 @router.post("/create", response_model=Transaction)
-def create_transaction(payload: TransactionCreate, session: Session = Depends(get_session)):
+def create_transaction(
+    payload: TransactionCreate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     data = payload.model_dump()
     if not data.get("category"):
         data["category"], _ = predict_category(payload.merchant)
+    data["user_id"] = current_user.id
 
     transaction = Transaction.model_validate(data)
     session.add(transaction)
@@ -35,5 +44,12 @@ def create_transaction(payload: TransactionCreate, session: Session = Depends(ge
 
 
 @router.get("/{transaction_id}", response_model=Transaction)
-def get_transaction(transaction_id: int, session: Session = Depends(get_session)):
-    return session.get(Transaction, transaction_id)
+def get_transaction(
+    transaction_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    transaction = session.get(Transaction, transaction_id)
+    if transaction is None or transaction.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return transaction

@@ -8,36 +8,37 @@ A minimal full-stack expense tracker:
 
 - **Backend**: FastAPI + SQLModel + Postgres, exposing a small REST API for expense transactions.
 - **Frontend**: a single-page React app that lists transactions, lets you add new ones, and connects a bank account via Plaid.
-- **Data sources**: transactions come from manual entry (auto-categorized by an in-house ML classifier) or from Plaid (using Plaid's own categories) — see [§3.7](#37-users--multi-tenancy) and [§3.8](#38-plaid-integration).
-- **Users**: a lightweight `User` table + picker (create/select by display name, no password) scopes transactions and Plaid connections per user — a stepping stone toward real auth, not a replacement for it.
+- **Data sources**: transactions come from manual entry (auto-categorized by an in-house ML classifier) or from Plaid (using Plaid's own categories) — see [§3.8](#38-plaid-integration).
+- **Auth**: real login via "Sign in with Google" (OAuth2/OIDC), backed by a signed session cookie. Every transaction and Plaid connection is scoped to whoever is actually logged in — see [§3.7](#37-authentication--multi-tenancy) and the detailed walkthrough in [docs/AUTHENTICATION.md](AUTHENTICATION.md).
 - **Infra**: all three services (plus Postgres) run together via Docker Compose for local development.
 
-There is no real auth (login/passwords/sessions) yet — see [§6 Known limitations](#6-known-limitations--next-steps) for what's intentionally deferred.
+See [§6 Known limitations](#6-known-limitations--next-steps) for what's intentionally still deferred (session revocation, a second OAuth provider, etc.).
 
 ## 2. Repo layout
 
 ```
 api/
-  main.py                   FastAPI app: CORS, router registration, startup hook
+  main.py                   FastAPI app: CORS, session middleware, router registration, startup hook
+  auth.py                   Google OAuth client config + get_current_user dependency
   database.py               SQLModel engine/session, DB init
   plaid_client.py           Configured plaid-python SDK client (from env vars)
   models/transaction.py     Transaction table (SQLModel) - user_id, source, plaid_transaction_id
-  models/user.py            User table (id, display_name - no password)
+  models/user.py            User table (id, display_name, email, oauth_provider, oauth_subject)
   models/plaid_item.py      One linked bank connection per user (item_id, access_token, cursor)
   schemas/transaction.py    TransactionCreate, CategoryPrediction (Pydantic schemas)
-  schemas/user.py           UserCreate
+  schemas/user.py           UserPublic (redacts oauth_provider/oauth_subject)
   schemas/plaid.py          Link/exchange/sync request+response schemas
+  routers/auth.py           /auth/* endpoints (login, callback, logout, me)
   routers/transactions.py   /transactions/* endpoints
-  routers/users.py          /users/* endpoints
   routers/plaid.py          /plaid/* endpoints (link-token, exchange, sync)
   ml/classifier.py          Merchant -> category scikit-learn Pipeline
   ml/data/labeled_transactions.csv   Seed training data
   requirements.txt
   Dockerfile
 frontend/
-  src/api.js                        Thin fetch wrapper around the API
+  src/api.js                        Thin fetch wrapper around the API (sends session cookie)
   src/App.jsx                       Container: owns state, wires components together
-  src/components/UserPicker.jsx           Select/create a user (no password)
+  src/components/LoginButton.jsx          "Sign in with Google" link
   src/components/PlaidLinkButton.jsx      Plaid Link flow: link token -> Link -> exchange -> sync
   src/components/SyncButton.jsx           Manual re-sync of Plaid transactions
   src/components/TransactionSummary.jsx   Count + total line
@@ -47,6 +48,7 @@ frontend/
   Dockerfile
 docker-compose.yml           Wires db + api + frontend together for local dev
 docs/ARCHITECTURE.md         This file
+docs/AUTHENTICATION.md       Detailed walkthrough of the OAuth login flow
 ```
 
 ## 3. Backend design
@@ -59,20 +61,31 @@ docs/ARCHITECTURE.md         This file
 
 `Transaction` (in `models/`) is the table — it has an `id`. `TransactionCreate` (in `schemas/`) is what a client sends to create one — it has no `id`, since that's server-assigned. Keeping these separate, even though SQLModel *could* let you reuse one class for both, avoids ever accepting a client-supplied `id` on create, and gives room to diverge later (e.g. once auth exists, `TransactionCreate` won't carry a `user_id` — that'll come from the session instead).
 
+This isn't Transaction-specific, and it isn't "schemas aggregate model data for display" — a schema exists wherever the API boundary needs a shape the table doesn't provide as-is:
+- **Omit a server-assigned field**, as above.
+- **Describe data with no table at all** — `LinkTokenResponse` (`schemas/plaid.py`) is just `{link_token: str}`; a Plaid Link token is never persisted, so there's no model for it to "aggregate."
+- **Redact a stored field** — `PlaidItem.access_token` (`models/plaid_item.py`) is a real column, but `ExchangePublicTokenResponse` (`schemas/plaid.py`) returns only `{connected: bool}`. Same reasoning behind `UserPublic` (`schemas/user.py`): `User` also stores `oauth_provider`/`oauth_subject`, but `GET /auth/me` returns only `{id, display_name, email}` — nothing about *how* someone authenticated needs to reach the frontend.
+
+Where none of that applies, there's no schema at all — `GET /transactions/list` responds with `response_model=Transaction` directly, reusing the table shape as-is.
+
 ### 3.3 Endpoints
 
 | Method | Path                             | Purpose                                   |
 |--------|----------------------------------|---------------------------------------------|
 | GET    | `/`                              | Health check                              |
-| GET    | `/users/list`                    | List users                                |
-| POST   | `/users/create`                  | Create a user (`display_name` only)       |
-| GET    | `/transactions/list`             | List a user's transactions (`user_id` query param) |
-| POST   | `/transactions/create`           | Create a transaction (`user_id` in body)  |
-| GET    | `/transactions/{id}`             | Fetch one transaction                     |
+| GET    | `/auth/login`                    | Redirect to Google's consent screen                        |
+| GET    | `/auth/callback`                 | Google redirects here; creates/looks up the user, sets the session |
+| POST   | `/auth/logout`                   | Clear the session                         |
+| GET    | `/auth/me`                       | Current logged-in user, or 401            |
+| GET    | `/transactions/list`             | List the logged-in user's transactions    |
+| POST   | `/transactions/create`           | Create a transaction for the logged-in user |
+| GET    | `/transactions/{id}`             | Fetch one transaction (404 if it isn't yours) |
 | POST   | `/transactions/predict-category` | Predict a category for a merchant         |
-| POST   | `/plaid/link-token`              | Create a Plaid Link token for a user      |
+| POST   | `/plaid/link-token`              | Create a Plaid Link token for the logged-in user |
 | POST   | `/plaid/exchange-public-token`   | Exchange a Link `public_token` for an access token, store it |
 | POST   | `/plaid/sync-transactions`       | Pull new/updated/removed transactions from Plaid into the DB |
+
+Every row below the `/auth/*` block requires an active session (`Depends(get_current_user)`) and operates only on the logged-in user's own data — see [§3.7](#37-authentication--multi-tenancy) and [docs/AUTHENTICATION.md](AUTHENTICATION.md) for exactly how that's enforced.
 
 Full interactive docs (generated by FastAPI from the schemas) are always available at `/docs` when the API is running.
 
@@ -111,19 +124,25 @@ Pipeline([
 
 **Where it plugs in**: `POST /transactions/create` uses the classifier to fill `category` only when the client didn't supply one — a client-provided category is never overridden. `POST /transactions/predict-category` exposes the same prediction standalone (merchant in, category + confidence out) so a client can preview or let a user correct a guess before it's ever saved.
 
-### 3.7 Users & multi-tenancy
+### 3.7 Authentication & multi-tenancy
 
-Adding Plaid meant deciding *whose* bank account a connection belongs to — the first point at which "single implicit user" stopped being tenable. `api/models/user.py` is deliberately bare: `id` + `display_name`, no password, no session. `Transaction.user_id` and `PlaidItem.user_id` scope data per user; every transaction and Plaid-related endpoint takes a `user_id`.
+Every transaction and Plaid connection belongs to a specific person, and now that's actually enforced: signing in with Google is required, and `user_id` is never something a client can supply — it comes from `Depends(get_current_user)` ([api/auth.py](api/auth.py)), which reads it out of the signed session cookie. This replaced an earlier, explicitly-named gap where `user_id` was just trusted from the request body/query string ([§6 history](#6-known-limitations--next-steps) — that gap is now closed, not just documented).
 
-**Why not build real auth here**: the request was "implement Plaid," not "implement accounts." A password/session/JWT system touches nearly every endpoint and the whole frontend's request flow — bundling it into this change would make a Plaid bug and an auth bug indistinguishable in the diff. The `User` table exists now because Plaid *needs* a tenant boundary to be meaningful (linking a bank account has to belong to someone), but "someone" is deliberately as thin as it can be: a name you pick from a dropdown, not a login. Real auth is still tracked as a named gap (see [§6](#6-known-limitations--next-steps)), and slots in later by replacing how `user_id` is *obtained* (a JWT claim instead of a picker selection) without changing how it's *used* (every query already filters by it).
+For the full mechanical walkthrough of the login flow — every redirect, what's in the cookie, how logout works, what an unauthenticated request actually receives — see **[docs/AUTHENTICATION.md](AUTHENTICATION.md)**. This section only covers the *why* behind the choices:
 
-**Frontend "session"**: the selected `user_id` lives in `localStorage` ([frontend/src/App.jsx](frontend/src/App.jsx)), not a cookie or server session — there's nothing server-side to forge or expire yet, so this is just remembering a UI choice across reloads, not authentication.
+**Why Authlib, not a hand-rolled OAuth flow**: OAuth2/OIDC involves several security-sensitive steps — a CSRF-protecting `state` parameter, a replay-protecting `nonce`, verifying Google's ID token signature against their published keys, checking `iss`/`aud`/`exp` claims. Getting any of these wrong is a real vulnerability, not a cosmetic bug. `authlib.integrations.starlette_client.OAuth` handles all of it, discovering Google's endpoints from its OIDC metadata document rather than hardcoding them — the same reasoning already applied to using `plaid-python` instead of hand-rolling Plaid's protocol.
+
+**Why a signed session cookie, not a JWT the frontend stores**: Starlette's `SessionMiddleware` ([api/main.py](api/main.py)) signs a cookie (itsdangerous) containing just `{"user_id": ...}`, marked `httponly` so frontend JavaScript can never read it — only the browser sends it automatically. A JWT in `localStorage` would be readable (and stealable) by any script running on the page, including a compromised dependency; that's a materially bigger blast radius for the exact same login state. The trade-off, named plainly: this cookie can't be revoked server-side short of rotating `SESSION_SECRET_KEY` (which would log out everyone at once) — there's no per-session "sign out this one device" story, because that would need a server-side session table this app doesn't have. Acceptable for now since nothing else in the app has a revocation/admin story either; a `Session` table is the natural next step if that's ever needed.
+
+**Why `User` rows are created automatically on first login, not by a form**: `api/models/user.py`'s `(oauth_provider, oauth_subject)` unique constraint means a Google account maps to exactly one `User` row, looked up or created in `POST /auth/callback` — there is no "sign up" step distinct from "first login." This replaced the old `UserPicker` (create-by-typing-a-name, zero verification) entirely; picker-created dev rows have no OAuth identity and are simply unreachable now, which is fine — they were fake data to begin with.
+
+**CORS + credentials**: `CORSMiddleware` now sets `allow_credentials=True` ([api/main.py](api/main.py)) — cross-port cookie flow (frontend on `:5173`, API on `:8000`) requires the browser be told it's allowed to send/receive the session cookie. This only works paired with an explicit `allow_origins` list (already in place, [§3.5](#35-cors)) — credentialed CORS cannot use a wildcard origin.
 
 ### 3.8 Plaid integration
 
 `api/plaid_client.py` configures the official `plaid-python` SDK once from `PLAID_CLIENT_ID` / `PLAID_SECRET` / `PLAID_ENV` (env vars, never sent to the frontend — see [§3.5 CORS](#35-cors) for the same never-expose-secrets posture). `api/routers/plaid.py` implements the three-step Plaid Link flow:
 
-1. **`POST /plaid/link-token`** — asks Plaid for a short-lived `link_token` scoped to `client_user_id=str(user_id)`. The frontend never talks to Plaid's API directly with our secret; it only ever sees this token.
+1. **`POST /plaid/link-token`** — asks Plaid for a short-lived `link_token` scoped to `client_user_id=str(current_user.id)` (from the session, not the request — [§3.7](#37-authentication--multi-tenancy)). The frontend never talks to Plaid's API directly with our secret; it only ever sees this token.
 2. **`POST /plaid/exchange-public-token`** — after the user completes Plaid Link (their hosted widget, not code we wrote — `react-plaid-link` handles loading and rendering it), the frontend gets back a `public_token` and hands it to us. We exchange it for a real `access_token` + `item_id` and store them in a `PlaidItem` row. The access token is never returned to the frontend past this point.
 3. **`POST /plaid/sync-transactions`** — uses Plaid's **`/transactions/sync`** endpoint (cursor-based) rather than the older `/transactions/get` (offset/date-range based). `sync` is Plaid's current recommendation: it returns exactly what changed (`added`/`modified`/`removed`) since the last stored `cursor`, so re-running it is naturally idempotent — verified directly: syncing the same linked account twice in a row returned `{added: 0, modified: 0, removed: 0}` the second time. `get` would require us to re-derive "what's new" ourselves by diffing date ranges.
 
@@ -146,18 +165,19 @@ The brief was "a simple frontend." The app is one screen with one list and one f
 
 ### 4.2 Structure
 
-- `src/api.js` — the only place that knows the API's base URL or fetch semantics. `listTransactions()` / `createTransaction()` are the two calls the UI needs; if the API grows, new functions get added here rather than components calling `fetch` directly, so there's one place to add auth headers or error handling later.
+- `src/api.js` — the only place that knows the API's base URL or fetch semantics. Every call passes `credentials: 'include'` so the session cookie is sent; `listTransactions()` / `createTransaction()` no longer take a `userId` parameter at all — the backend derives it from the cookie, so there's nothing for the frontend to pass or get wrong. If the API grows, new functions get added here rather than components calling `fetch` directly.
 - `src/App.jsx` is a **container component**: it owns all state (`transactions`, `loading`, `submitting`, `error`) and the two operations that touch the API (`refresh`, `handleCreate`), then hands data and callbacks down to three presentational children under `src/components/`. It fetches the list on mount and re-fetches after a successful create rather than optimistically appending the new row — for a low-traffic single-user tool, the extra round-trip is cheap and it guarantees the displayed list always matches what the server actually persisted (e.g. reflects the classifier's auto-filled category), which matters more than shaving one network call.
 - `TransactionSummary` / `TransactionForm` / `TransactionList` — split out of what was originally one file once the file started mixing three concerns (a summary line, a stateful form, a data table) that don't share markup or logic. `TransactionForm` deliberately keeps its own field state locally rather than lifting it into `App` — nothing outside the form cares about in-progress keystrokes, only the finished payload on submit (`onCreate(payload) -> Promise<boolean>`), and the returned boolean tells the form whether to clear itself, without `App` needing to know anything about the form's internal shape.
 - **Why not a custom hook (`useTransactions`) or Context instead**: both would solve a problem this app doesn't have yet — sharing transaction state across *multiple, unrelated* components. Right now exactly one component tree needs it, so passing state down as props from `App` is the simplest thing that works; a hook/Context is worth it once a second screen or a deeply nested consumer shows up.
 - **Why one shared `App.css` instead of per-component stylesheets/CSS modules**: the components share the same visual language (`.card`, `.muted`, `.amount`, etc.) defined once; splitting styles per component now would mean duplicating or importing across files for zero isolation benefit at this size.
-- `UserPicker` / `PlaidLinkButton` / `SyncButton` — added alongside Plaid support ([§3.7](#37-users--multi-tenancy), [§3.8](#38-plaid-integration)). `PlaidLinkButton` uses `react-plaid-link`'s `usePlaidLink` hook rather than hand-rolling the Link iframe/script loading — Plaid Link is a hosted widget with its own internal flows (phone verification, institution search, OAuth redirects for some banks) that would be brittle and against Plaid's terms to reimplement. On a successful Link, the button chains exchange → sync → refresh itself, so connecting a bank immediately populates transactions; `SyncButton` exists separately for pulling *new* transactions on an already-linked account later, without re-running Link.
+- `PlaidLinkButton` / `SyncButton` — added alongside Plaid support ([§3.8](#38-plaid-integration)). `PlaidLinkButton` uses `react-plaid-link`'s `usePlaidLink` hook rather than hand-rolling the Link iframe/script loading — Plaid Link is a hosted widget with its own internal flows (phone verification, institution search, OAuth redirects for some banks) that would be brittle and against Plaid's terms to reimplement. On a successful Link, the button chains exchange → sync → refresh itself, so connecting a bank immediately populates transactions; `SyncButton` exists separately for pulling *new* transactions on an already-linked account later, without re-running Link.
+- `LoginButton` — a plain `<a href={loginUrl()}>`, not a `fetch`-driven click handler. The OAuth redirect dance (browser → Google's consent screen → back) has to happen as real page navigations in the actual address bar; a `fetch` call can't drive that. `App.jsx` decides what to render (the login screen vs. the dashboard) based on whether `GET /auth/me` succeeds on mount — there's no client-side notion of "logged in" beyond that one check.
 
 ### 4.3 Configuration
 
 The API base URL is read from `VITE_API_URL` at build/dev-server start (`frontend/.env`, default `http://localhost:8000`), not hardcoded, so the same code works when the frontend runs outside vs. inside Docker Compose, and in a future deployed environment, by changing one env var.
 
-The Plaid `PLAID_CLIENT_ID` / `PLAID_SECRET` live only in the root `.env`, read by the `api` service — never passed to the frontend build, so the secret can't leak into browser-shipped JS.
+The Plaid `PLAID_CLIENT_ID` / `PLAID_SECRET` and the Google `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `SESSION_SECRET_KEY` all live only in the root `.env`, read by the `api` service — never passed to the frontend build, so none of these secrets can leak into browser-shipped JS.
 
 ## 5. Local development
 
@@ -191,6 +211,10 @@ Useful when iterating on UI without wanting to rebuild containers.
 
 Get a free Sandbox `PLAID_CLIENT_ID` / `PLAID_SECRET` at [dashboard.plaid.com](https://dashboard.plaid.com) and put them directly in the root `.env` (never commit real values — `.env` is gitignored; `.env.example` shows the shape). `PLAID_ENV` defaults to `sandbox`, which uses fake test institutions and fabricated transaction data — no real bank account needed to develop or test against.
 
+### Google OAuth credentials
+
+Create a Google OAuth client at [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application. Add `http://localhost:8000/auth/callback` as an authorized redirect URI (this must match `/auth/login`'s redirect target exactly, or Google will reject the flow). Put `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env`. Also set `SESSION_SECRET_KEY` — any long random string works, e.g. `openssl rand -hex 32`; this signs the session cookie, so treat it like a password, not something to commit. See [docs/AUTHENTICATION.md](AUTHENTICATION.md) for the full flow this powers.
+
 ### Resetting the dev database after a schema change
 
 This project has no migration tool ([§6](#6-known-limitations--next-steps)) — `init_db()`'s `create_all()` only creates tables that don't already exist, it never alters an existing one. Adding a column (like `Transaction.user_id`) to a table that already exists in the Postgres volume will make every insert fail. When a model gains/changes a column, reset the local dev database:
@@ -206,7 +230,9 @@ This deletes all local dev data — fine for fake test rows, not something to ru
 
 Carried over from the original README, still true:
 
-- **No real auth** — there's a `User` table and per-user scoping ([§3.7](#37-users--multi-tenancy)), but no password, session, or token: anyone can act as any user simply by picking their name from a dropdown. `user_id` is trusted from the request body/query string with no verification.
+- **Sessions can't be revoked individually** ([§3.7](#37-authentication--multi-tenancy)) — logging out just clears the browser's cookie; there's no server-side session table, so a captured cookie remains valid until it expires or `SESSION_SECRET_KEY` is rotated (which logs out everyone at once, not just one compromised session).
+- **Single OAuth provider (Google only)** — no account-linking flow if someone wants to also sign in with a different provider; each provider would currently create a separate `User` row for the same person.
+- **CSRF protection relies on `SameSite=Lax`, not a dedicated token** — acceptable for this app's current request patterns (no cross-site form posts to worry about yet), but named explicitly rather than assumed; a state-changing-request CSRF token would be the next layer if that changes.
 - **Plaid access tokens stored in plaintext** ([§3.8](#38-plaid-integration)) — must be encrypted at rest before this touches a real (non-Sandbox) account.
 - **One Plaid connection per user** — linking a second bank account isn't supported; `PlaidItem.user_id` is unique.
 - **No webhook-driven or scheduled sync** — transactions only update when someone clicks "Sync"; stale data between clicks is expected, not a bug.

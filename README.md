@@ -1,12 +1,17 @@
 # Expense Tracker
 
-Minimal starter: FastAPI + Postgres backend, React frontend, containerized with Docker. Transactions come from manual entry or from a linked bank account via Plaid.
+Minimal starter: FastAPI + Postgres backend, React frontend, containerized with Docker. Sign in with Google to see your own transactions, entered manually or synced from a linked bank account via Plaid.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full write-up of what's here and why it's built this way.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full write-up of what's here and why it's built this way, and [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for exactly how the login flow works.
 
 ## Run
 
-Add your Plaid Sandbox credentials (free at [dashboard.plaid.com](https://dashboard.plaid.com)) to `.env` — see `.env.example` for the shape. Then:
+Add your credentials to `.env` — see `.env.example` for the shape:
+- Plaid Sandbox: free at [dashboard.plaid.com](https://dashboard.plaid.com)
+- Google OAuth client: free at [console.cloud.google.com](https://console.cloud.google.com) (redirect URI: `http://localhost:8000/auth/callback`)
+- `SESSION_SECRET_KEY`: any long random string, e.g. `openssl rand -hex 32`
+
+Then:
 
 ```bash
 docker compose up --build
@@ -15,24 +20,25 @@ docker compose up --build
 Then visit:
 - http://localhost:5173 — the React frontend
 - http://localhost:8000/docs — interactive API docs
-- http://localhost:8000/transactions/list?user_id=1 — list transactions for a user (raw JSON)
 
 ## What's here
 
-- `api/main.py` — app entrypoint, CORS
+- `api/main.py` — app entrypoint, CORS, session middleware
+- `api/auth.py` — Google OAuth client config + `get_current_user` dependency
 - `api/database.py` — SQLModel engine/session setup
 - `api/plaid_client.py` — configured `plaid-python` SDK client
 - `api/models/transaction.py` — the `Transaction` table (per-user, tagged manual vs. Plaid)
-- `api/models/user.py`, `api/models/plaid_item.py` — lightweight users, linked bank connections
-- `api/routers/transactions.py`, `api/routers/users.py`, `api/routers/plaid.py` — endpoints
+- `api/models/user.py`, `api/models/plaid_item.py` — users (Google-linked), linked bank connections
+- `api/routers/auth.py`, `api/routers/transactions.py`, `api/routers/plaid.py` — endpoints
 - `api/ml/classifier.py` — scikit-learn Pipeline that predicts a category for manually-entered transactions
 - `frontend/src/App.jsx` — container: state + data fetching
-- `frontend/src/components/` — `UserPicker`, `PlaidLinkButton`, `SyncButton`, `TransactionSummary`, `TransactionForm`, `TransactionList`
-- `frontend/src/api.js` — API client used by the UI
+- `frontend/src/components/` — `LoginButton`, `PlaidLinkButton`, `SyncButton`, `TransactionSummary`, `TransactionForm`, `TransactionList`
+- `frontend/src/api.js` — API client used by the UI (sends the session cookie on every call)
 
 ## Next steps
 
-- Real login (password/session/JWT auth) — today's `User` picker has no password, see [docs/ARCHITECTURE.md §3.7](docs/ARCHITECTURE.md#37-users--multi-tenancy)
+- Per-session revocation (a server-side session table) instead of an all-or-nothing signing-secret rotation
+- A second OAuth provider + account linking
 - Encrypt Plaid access tokens at rest before using a non-Sandbox account
 - Add nightly Airflow ETL job (data engineering layer)
 - Add threat model doc

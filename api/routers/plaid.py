@@ -7,52 +7,44 @@ from plaid.model.products import Products
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from sqlmodel import Session, select
 
+from auth import get_current_user
 from database import get_session
 from models import PlaidItem, Transaction, User
 from plaid_client import client
 from schemas.plaid import (
     ExchangePublicTokenRequest,
     ExchangePublicTokenResponse,
-    LinkTokenRequest,
     LinkTokenResponse,
-    SyncRequest,
     SyncResponse,
 )
 
 router = APIRouter(prefix="/plaid", tags=["plaid"])
 
 
-def _get_user_or_404(user_id: int, session: Session) -> User:
-    user = session.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
-
-
 @router.post("/link-token", response_model=LinkTokenResponse)
-def create_link_token(payload: LinkTokenRequest, session: Session = Depends(get_session)):
-    _get_user_or_404(payload.user_id, session)
-
+def create_link_token(current_user: User = Depends(get_current_user)):
     request = LinkTokenCreateRequest(
         products=[Products("transactions")],
         client_name="Expense Tracker",
         country_codes=[CountryCode("US")],
         language="en",
-        user=LinkTokenCreateRequestUser(client_user_id=str(payload.user_id)),
+        user=LinkTokenCreateRequestUser(client_user_id=str(current_user.id)),
     )
     response = client.link_token_create(request)
     return LinkTokenResponse(link_token=response.link_token)
 
 
 @router.post("/exchange-public-token", response_model=ExchangePublicTokenResponse)
-def exchange_public_token(payload: ExchangePublicTokenRequest, session: Session = Depends(get_session)):
-    _get_user_or_404(payload.user_id, session)
-
+def exchange_public_token(
+    payload: ExchangePublicTokenRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     request = ItemPublicTokenExchangeRequest(public_token=payload.public_token)
     response = client.item_public_token_exchange(request)
 
     existing = session.exec(
-        select(PlaidItem).where(PlaidItem.user_id == payload.user_id)
+        select(PlaidItem).where(PlaidItem.user_id == current_user.id)
     ).first()
     if existing:
         existing.item_id = response.item_id
@@ -62,7 +54,7 @@ def exchange_public_token(payload: ExchangePublicTokenRequest, session: Session 
     else:
         session.add(
             PlaidItem(
-                user_id=payload.user_id,
+                user_id=current_user.id,
                 item_id=response.item_id,
                 access_token=response.access_token,
             )
@@ -81,11 +73,12 @@ def _category_for(txn) -> str:
 
 
 @router.post("/sync-transactions", response_model=SyncResponse)
-def sync_transactions(payload: SyncRequest, session: Session = Depends(get_session)):
-    _get_user_or_404(payload.user_id, session)
-
+def sync_transactions(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     item = session.exec(
-        select(PlaidItem).where(PlaidItem.user_id == payload.user_id)
+        select(PlaidItem).where(PlaidItem.user_id == current_user.id)
     ).first()
     if item is None:
         raise HTTPException(status_code=400, detail="No linked bank account for this user")
@@ -103,7 +96,7 @@ def sync_transactions(payload: SyncRequest, session: Session = Depends(get_sessi
         for txn in response.added:
             session.add(
                 Transaction(
-                    user_id=payload.user_id,
+                    user_id=current_user.id,
                     date=txn.date,
                     merchant=txn.merchant_name or txn.name,
                     amount=txn.amount,

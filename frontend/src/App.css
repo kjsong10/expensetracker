@@ -92,33 +92,6 @@ th {
   font-size: 13px;
 }
 
-.user-picker-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-}
-
-.user-picker-row select {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: inherit;
-}
-
-.user-picker-new {
-  display: flex;
-  gap: 8px;
-}
-
-.user-picker-new input {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-}
-
 .plaid-actions {
   display: flex;
   flex-wrap: wrap;
@@ -131,8 +104,7 @@ th {
   gap: 10px;
 }
 
-.plaid-action button,
-.user-picker-new button {
+.plaid-action button {
   padding: 8px 16px;
   border: none;
   border-radius: 6px;
@@ -142,8 +114,32 @@ th {
   white-space: nowrap;
 }
 
-.plaid-action button:disabled,
-.user-picker-new button:disabled {
+.plaid-action button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.login-card {
+  text-align: center;
+}
+
+.login-button {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
 }

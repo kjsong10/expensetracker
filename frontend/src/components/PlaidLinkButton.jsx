@@ -2,29 +2,28 @@ import { useCallback, useEffect, useState } from 'react'
 import { usePlaidLink } from 'react-plaid-link'
 import { createLinkToken, exchangePublicToken, syncTransactions } from '../api'
 
-export default function PlaidLinkButton({ userId, onConnected }) {
+export default function PlaidLinkButton({ onConnected }) {
   const [linkToken, setLinkToken] = useState(null)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    setLinkToken(null)
-    createLinkToken(userId)
+    createLinkToken()
       .then((res) => setLinkToken(res.link_token))
       .catch((err) => setError(err.message))
-  }, [userId])
+  }, [])
 
   const onSuccess = useCallback(
     (publicToken) => {
       setConnecting(true)
       setError(null)
-      exchangePublicToken(userId, publicToken)
-        .then(() => syncTransactions(userId))
+      exchangePublicToken(publicToken)
+        .then(() => syncTransactions())
         .then(() => onConnected())
         .catch((err) => setError(err.message))
         .finally(() => setConnecting(false))
     },
-    [userId, onConnected]
+    [onConnected]
   )
 
   const { open, ready } = usePlaidLink({ token: linkToken, onSuccess })

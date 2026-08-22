@@ -4,3 +4,6 @@ sqlmodel
 psycopg2-binary
 scikit-learn
 plaid-python
+authlib
+httpx
+itsdangerous

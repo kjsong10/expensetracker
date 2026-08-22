@@ -2,6 +2,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 async function request(path, options) {
   const res = await fetch(`${API_URL}${path}`, {
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
@@ -12,19 +13,20 @@ async function request(path, options) {
   return res.json()
 }
 
-export function listUsers() {
-  return request('/users/list')
+export function getCurrentUser() {
+  return request('/auth/me')
 }
 
-export function createUser(displayName) {
-  return request('/users/create', {
-    method: 'POST',
-    body: JSON.stringify({ display_name: displayName }),
-  })
+export function logout() {
+  return request('/auth/logout', { method: 'POST' })
 }
 
-export function listTransactions(userId) {
-  return request(`/transactions/list?user_id=${userId}`)
+export function loginUrl() {
+  return `${API_URL}/auth/login`
+}
+
+export function listTransactions() {
+  return request('/transactions/list')
 }
 
 export function createTransaction(transaction) {
@@ -34,23 +36,17 @@ export function createTransaction(transaction) {
   })
 }
 
-export function createLinkToken(userId) {
-  return request('/plaid/link-token', {
-    method: 'POST',
-    body: JSON.stringify({ user_id: userId }),
-  })
+export function createLinkToken() {
+  return request('/plaid/link-token', { method: 'POST' })
 }
 
-export function exchangePublicToken(userId, publicToken) {
+export function exchangePublicToken(publicToken) {
   return request('/plaid/exchange-public-token', {
     method: 'POST',
-    body: JSON.stringify({ user_id: userId, public_token: publicToken }),
+    body: JSON.stringify({ public_token: publicToken }),
   })
 }
 
-export function syncTransactions(userId) {
-  return request('/plaid/sync-transactions', {
-    method: 'POST',
-    body: JSON.stringify({ user_id: userId }),
-  })
+export function syncTransactions() {
+  return request('/plaid/sync-transactions', { method: 'POST' })
 }

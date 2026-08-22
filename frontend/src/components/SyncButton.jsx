@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { syncTransactions } from '../api'
 
-export default function SyncButton({ userId, onSynced }) {
+export default function SyncButton({ onSynced }) {
   const [syncing, setSyncing] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -10,7 +10,7 @@ export default function SyncButton({ userId, onSynced }) {
     setSyncing(true)
     setError(null)
     try {
-      const res = await syncTransactions(userId)
+      const res = await syncTransactions()
       setResult(res)
       await onSynced()
     } catch (err) {

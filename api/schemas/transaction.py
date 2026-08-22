@@ -4,7 +4,6 @@ from typing import Optional
 
 
 class TransactionCreate(BaseModel):
-    user_id: int
     date: date
     merchant: str
     amount: float
