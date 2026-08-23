@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 from typing import List
 
@@ -13,10 +13,18 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 @router.get("/list", response_model=List[Transaction])
 def list_transactions(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    return session.exec(select(Transaction).where(Transaction.user_id == current_user.id)).all()
+    return session.exec(
+        select(Transaction)
+        .where(Transaction.user_id == current_user.id)
+        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
 
 
 @router.post("/predict-category", response_model=CategoryPrediction)

@@ -25,8 +25,8 @@ export function loginUrl() {
   return `${API_URL}/auth/login`
 }
 
-export function listTransactions() {
-  return request('/transactions/list')
+export function listTransactions({ limit = 50, offset = 0 } = {}) {
+  return request(`/transactions/list?limit=${limit}&offset=${offset}`)
 }
 
 export function createTransaction(transaction) {

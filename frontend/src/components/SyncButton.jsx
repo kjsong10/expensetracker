@@ -13,9 +13,13 @@ export default function SyncButton({ onSynced }) {
       const res = await syncTransactions()
       setResult(res)
       await onSynced()
-    } catch (err) {
+    } 
+
+    catch (err) {
       setError(err.message)
-    } finally {
+    } 
+    
+    finally {
       setSyncing(false)
     }
   }

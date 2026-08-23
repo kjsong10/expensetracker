@@ -16,41 +16,6 @@
   text-align: left;
 }
 
-.form {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr) auto;
-  gap: 8px;
-}
-
-.form input {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  min-width: 0;
-}
-
-.form button {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.form button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-@media (max-width: 640px) {
-  .form {
-    grid-template-columns: 1fr;
-  }
-}
-
 table {
   width: 100%;
   border-collapse: collapse;

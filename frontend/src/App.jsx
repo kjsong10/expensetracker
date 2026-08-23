@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react'
-import { getCurrentUser, listTransactions, createTransaction, logout } from './api'
+import { getCurrentUser, listTransactions, logout } from './api'
 import LoginButton from './components/LoginButton'
 import PlaidLinkButton from './components/PlaidLinkButton'
 import SyncButton from './components/SyncButton'
 import TransactionSummary from './components/TransactionSummary'
-import TransactionForm from './components/TransactionForm'
 import TransactionList from './components/TransactionList'
 import './App.css'
+
+const PAGE_SIZE = 50
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -30,9 +32,9 @@ export default function App() {
     setLoading(true)
     setError(null)
     try {
-      const data = await listTransactions()
-      data.sort((a, b) => (a.date < b.date ? 1 : -1))
+      const data = await listTransactions({ limit: PAGE_SIZE, offset: 0 })
       setTransactions(data)
+      setHasMore(data.length === PAGE_SIZE)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -40,18 +42,17 @@ export default function App() {
     }
   }
 
-  async function handleCreate(fields) {
-    setSubmitting(true)
+  async function loadMore() {
+    setLoadingMore(true)
     setError(null)
     try {
-      await createTransaction(fields)
-      await refresh()
-      return true
+      const data = await listTransactions({ limit: PAGE_SIZE, offset: transactions.length })
+      setTransactions((prev) => [...prev, ...data])
+      setHasMore(data.length === PAGE_SIZE)
     } catch (err) {
       setError(err.message)
-      return false
     } finally {
-      setSubmitting(false)
+      setLoadingMore(false)
     }
   }
 
@@ -90,8 +91,13 @@ export default function App() {
           </section>
 
           <TransactionSummary count={transactions.length} total={total} />
-          <TransactionForm onCreate={handleCreate} submitting={submitting} />
-          <TransactionList transactions={transactions} loading={loading} />
+          <TransactionList
+            transactions={transactions}
+            loading={loading}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            onLoadMore={loadMore}
+          />
         </>
       )}
     </>
