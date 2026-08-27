@@ -22,9 +22,10 @@ api/
   auth.py                   Google OAuth client config + get_current_user dependency
   database.py               SQLModel engine/session, DB init
   plaid_client.py           Configured plaid-python SDK client (from env vars)
+  crypto.py                 Fernet encrypt/decrypt helpers for Plaid access tokens at rest
   models/transaction.py     Transaction table (SQLModel) - user_id, source, plaid_transaction_id
   models/user.py            User table (id, display_name, email, oauth_provider, oauth_subject)
-  models/plaid_item.py      One linked bank connection per user (item_id, access_token, cursor)
+  models/plaid_item.py      One linked bank connection per user (item_id, access_token_encrypted, cursor)
   schemas/transaction.py    TransactionCreate, CategoryPrediction (Pydantic schemas)
   schemas/user.py           UserPublic (redacts oauth_provider/oauth_subject)
   schemas/plaid.py          Link/exchange/sync request+response schemas
@@ -63,7 +64,7 @@ docs/AUTHENTICATION.md       Detailed walkthrough of the OAuth login flow
 This isn't Transaction-specific, and it isn't "schemas aggregate model data for display" — a schema exists wherever the API boundary needs a shape the table doesn't provide as-is:
 - **Omit a server-assigned field**, as above.
 - **Describe data with no table at all** — `LinkTokenResponse` (`schemas/plaid.py`) is just `{link_token: str}`; a Plaid Link token is never persisted, so there's no model for it to "aggregate."
-- **Redact a stored field** — `PlaidItem.access_token` (`models/plaid_item.py`) is a real column, but `ExchangePublicTokenResponse` (`schemas/plaid.py`) returns only `{connected: bool}`. Same reasoning behind `UserPublic` (`schemas/user.py`): `User` also stores `oauth_provider`/`oauth_subject`, but `GET /auth/me` returns only `{id, display_name, email}` — nothing about *how* someone authenticated needs to reach the frontend.
+- **Redact a stored field** — `PlaidItem.access_token_encrypted` (`models/plaid_item.py`) is a real column, but `ExchangePublicTokenResponse` (`schemas/plaid.py`) returns only `{connected: bool}`. Same reasoning behind `UserPublic` (`schemas/user.py`): `User` also stores `oauth_provider`/`oauth_subject`, but `GET /auth/me` returns only `{id, display_name, email}` — nothing about *how* someone authenticated needs to reach the frontend.
 
 Where none of that applies, there's no schema at all — `GET /transactions/list` responds with `response_model=Transaction` directly, reusing the table shape as-is.
 
@@ -155,7 +156,7 @@ For the full mechanical walkthrough of the login flow — every redirect, what's
 
 **One `PlaidItem` per user, not per institution**: `PlaidItem.user_id` is unique. A user can link one bank connection; linking a second would need to either replace the first or the model would need to drop that uniqueness constraint and every query would need to fan out across a user's items. Real multi-institution support is a documented follow-up, not built here, since nothing in the request implied a user needs more than one linked account yet.
 
-**Access token storage is plaintext, on purpose named as a gap, not hidden**: `PlaidItem.access_token` sits in Postgres unencrypted, at the same trust level as every other credential this dev-stage app handles (i.e., none — see [§6](#6-known-limitations--next-steps)). A Plaid access token can read a real bank account's transaction history, which makes this a materially bigger deal than the app's other "no security yet" gaps. Before this touches a real account outside Sandbox, this needs encryption at rest (e.g. via a KMS-backed envelope) or a secrets vault — not a "someday," a precondition.
+**Access tokens are encrypted at rest with Fernet**: a Plaid access token can read a real bank account's transaction history, which makes it a materially bigger deal than a typical app credential — leaking it doesn't just compromise this app, it hands over ongoing read access to someone's real bank data. `api/crypto.py` wraps `cryptography.fernet.Fernet`, keyed from a `TOKEN_ENCRYPTION_KEY` env var (never committed, generated once with `Fernet.generate_key()`); the app fails fast at import time if the key is missing, matching the existing pattern for `DATABASE_URL`/`SESSION_SECRET_KEY`. `POST /plaid/exchange-public-token` encrypts the token before it's ever written to `PlaidItem.access_token_encrypted` (`api/routers/plaid.py`); `POST /plaid/sync-transactions` decrypts it in memory just long enough to call Plaid's API, and it's never returned to the frontend. Fernet (AES-128-CBC + HMAC, both authenticated) is symmetric, application-level encryption — simpler to operate than a KMS-backed envelope scheme, and the right fit while there's a single app instance and no key-rotation story yet; a KMS/secrets-vault-backed envelope is the natural upgrade once this runs as more than one process or `TOKEN_ENCRYPTION_KEY` itself needs rotation without a full re-encrypt.
 
 ## 4. Frontend design
 
@@ -237,7 +238,6 @@ Carried over from the original README, still true:
 - **Sessions can't be revoked individually** ([§3.7](#37-authentication--multi-tenancy)) — logging out just clears the browser's cookie; there's no server-side session table, so a captured cookie remains valid until it expires or `SESSION_SECRET_KEY` is rotated (which logs out everyone at once, not just one compromised session).
 - **Single OAuth provider (Google only)** — no account-linking flow if someone wants to also sign in with a different provider; each provider would currently create a separate `User` row for the same person.
 - **CSRF protection relies on `SameSite=Lax`, not a dedicated token** — acceptable for this app's current request patterns (no cross-site form posts to worry about yet), but named explicitly rather than assumed; a state-changing-request CSRF token would be the next layer if that changes.
-- **Plaid access tokens stored in plaintext** ([§3.8](#38-plaid-integration)) — must be encrypted at rest before this touches a real (non-Sandbox) account.
 - **One Plaid connection per user** — linking a second bank account isn't supported; `PlaidItem.user_id` is unique.
 - **No webhook-driven or scheduled sync** — transactions only update when someone clicks "Sync"; stale data between clicks is expected, not a bug.
 - **No migrations** — `create_all()` on startup means schema changes to `Transaction` require manually altering the table or dropping the dev database; a real migration tool (e.g. Alembic) is needed before this touches real data.
