@@ -7,3 +7,4 @@ plaid-python
 authlib
 httpx
 itsdangerous
+cryptography

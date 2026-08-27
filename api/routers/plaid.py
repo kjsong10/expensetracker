@@ -8,6 +8,7 @@ from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from sqlmodel import Session, select
 
 from auth import get_current_user
+from crypto import decrypt_token, encrypt_token
 from database import get_session
 from models import PlaidItem, Transaction, User
 from plaid_client import client
@@ -48,7 +49,7 @@ def exchange_public_token(
     ).first()
     if existing:
         existing.item_id = response.item_id
-        existing.access_token = response.access_token
+        existing.access_token_encrypted = encrypt_token(response.access_token)
         existing.cursor = None
         session.add(existing)
     else:
@@ -56,7 +57,7 @@ def exchange_public_token(
             PlaidItem(
                 user_id=current_user.id,
                 item_id=response.item_id,
-                access_token=response.access_token,
+                access_token_encrypted=encrypt_token(response.access_token),
             )
         )
     session.commit()
@@ -86,9 +87,10 @@ def sync_transactions(
     added_count = modified_count = removed_count = 0
     cursor = item.cursor
     has_more = True
+    access_token = decrypt_token(item.access_token_encrypted)
 
     while has_more:
-        kwargs = {"access_token": item.access_token}
+        kwargs = {"access_token": access_token}
         if cursor is not None:
             kwargs["cursor"] = cursor
         response = client.transactions_sync(TransactionsSyncRequest(**kwargs))
