@@ -1,4 +1,8 @@
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
+from plaid.exceptions import ApiException
 from plaid.model.country_code import CountryCode
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
@@ -19,7 +23,33 @@ from schemas.plaid import (
     SyncResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/plaid", tags=["plaid"])
+
+# Plaid error codes worth surfacing as "try again shortly" rather than a hard
+# failure - see https://plaid.com/docs/errors/. ITEM_LOGIN_REQUIRED is handled
+# separately since retrying it can never succeed without user re-auth.
+TRANSIENT_PLAID_ERROR_CODES = {
+    "RATE_LIMIT_EXCEEDED",
+    "PLANNED_MAINTENANCE",
+    "PRODUCT_NOT_READY",
+    "INTERNAL_SERVER_ERROR",
+}
+
+# Caps how many Plaid pages one HTTP request will fetch. Each page is up to
+# ~500 transactions, so this bounds a single request to roughly 10k
+# transactions before asking the caller to sync again to continue - without
+# it, a multi-year backfill runs the whole loop inline on one worker thread
+# with no upper bound on request duration.
+MAX_SYNC_PAGES_PER_REQUEST = 20
+
+
+def _plaid_error_code(exc: ApiException) -> str | None:
+    try:
+        return json.loads(exc.body).get("error_code")
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 
 @router.post("/link-token", response_model=LinkTokenResponse)
@@ -85,15 +115,34 @@ def sync_transactions(
         raise HTTPException(status_code=400, detail="No linked bank account for this user")
 
     added_count = modified_count = removed_count = 0
-    cursor = item.cursor
     has_more = True
+    pages_fetched = 0
     access_token = decrypt_token(item.access_token_encrypted)
 
-    while has_more:
+    while has_more and pages_fetched < MAX_SYNC_PAGES_PER_REQUEST:
         kwargs = {"access_token": access_token}
-        if cursor is not None:
-            kwargs["cursor"] = cursor
-        response = client.transactions_sync(TransactionsSyncRequest(**kwargs))
+        if item.cursor is not None:
+            kwargs["cursor"] = item.cursor
+
+        try:
+            response = client.transactions_sync(TransactionsSyncRequest(**kwargs))
+        except ApiException as exc:
+            error_code = _plaid_error_code(exc)
+            logger.warning(
+                "Plaid sync failed for user %s (item %s): %s",
+                current_user.id, item.item_id, error_code or exc.body,
+            )
+            if error_code == "ITEM_LOGIN_REQUIRED":
+                raise HTTPException(
+                    status_code=409,
+                    detail="This bank connection needs to be re-authenticated. Reconnect your account via Plaid Link.",
+                ) from exc
+            if error_code in TRANSIENT_PLAID_ERROR_CODES:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Plaid is temporarily unavailable. Try syncing again shortly.",
+                ) from exc
+            raise HTTPException(status_code=502, detail="Plaid sync failed. Try again later.") from exc
 
         for txn in response.added:
             session.add(
@@ -129,11 +178,15 @@ def sync_transactions(
                 session.delete(existing)
                 removed_count += 1
 
-        cursor = response.next_cursor
+        item.cursor = response.next_cursor
         has_more = response.has_more
+        session.add(item)
+        session.commit()
+        pages_fetched += 1
 
-    item.cursor = cursor
-    session.add(item)
-    session.commit()
-
-    return SyncResponse(added=added_count, modified=modified_count, removed=removed_count)
+    return SyncResponse(
+        added=added_count,
+        modified=modified_count,
+        removed=removed_count,
+        has_more=has_more,
+    )

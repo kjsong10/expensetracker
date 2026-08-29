@@ -18,7 +18,13 @@ export default function PlaidLinkButton({ onConnected }) {
       setConnecting(true)
       setError(null)
       exchangePublicToken(publicToken)
-        .then(() => syncTransactions())
+        .then(async () => {
+          let hasMore = true
+          while (hasMore) {
+            const res = await syncTransactions()
+            hasMore = res.has_more
+          }
+        })
         .then(() => onConnected())
         .catch((err) => setError(err.message))
         .finally(() => setConnecting(false))

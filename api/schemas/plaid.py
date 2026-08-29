@@ -20,3 +20,4 @@ class SyncResponse(BaseModel):
     added: int
     modified: int
     removed: int
+    has_more: bool = False

@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from sqlmodel import SQLModel, Field
 from typing import Optional
 
@@ -8,7 +9,7 @@ class Transaction(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id")
     date: date
     merchant: str
-    amount: float
+    amount: Decimal
     category: Optional[str] = None
     source: str = Field(default="manual")
     plaid_transaction_id: Optional[str] = Field(default=None, unique=True, index=True)

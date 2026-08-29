@@ -9,16 +9,24 @@ export default function SyncButton({ onSynced }) {
   async function handleSync() {
     setSyncing(true)
     setError(null)
+    const totals = { added: 0, modified: 0, removed: 0 }
     try {
-      const res = await syncTransactions()
-      setResult(res)
+      let hasMore = true
+      while (hasMore) {
+        const res = await syncTransactions()
+        totals.added += res.added
+        totals.modified += res.modified
+        totals.removed += res.removed
+        hasMore = res.has_more
+      }
+      setResult(totals)
       await onSynced()
-    } 
+    }
 
     catch (err) {
       setError(err.message)
-    } 
-    
+    }
+
     finally {
       setSyncing(false)
     }
