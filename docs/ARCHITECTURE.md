@@ -75,7 +75,8 @@ Where none of that applies, there's no schema at all — `GET /transactions/list
 
 | Method | Path                             | Purpose                                   |
 |--------|----------------------------------|---------------------------------------------|
-| GET    | `/`                              | Health check                              |
+| GET    | `/`                              | Liveness check - process is up, no dependencies checked |
+| GET    | `/healthz`                       | Readiness check - confirms the app can reach Postgres |
 | GET    | `/auth/login`                    | Redirect to Google's consent screen                        |
 | GET    | `/auth/callback`                 | Google redirects here; creates/looks up the user, sets the session |
 | POST   | `/auth/logout`                   | Clear the session                         |

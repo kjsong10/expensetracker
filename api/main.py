@@ -1,10 +1,12 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import Session, select
 from starlette.middleware.sessions import SessionMiddleware
 
 from auth import SESSION_SECRET_KEY
+from database import get_session
 from ml.classifier import train_classifier
 from routers import auth, plaid, transactions
 
@@ -61,4 +63,18 @@ def on_startup():
 
 @app.get("/")
 def read_root():
+    """Liveness check: is the process up and serving requests at all.
+    Deliberately has no dependencies of its own - see /healthz for that."""
+    return {"status": "ok"}
+
+
+@app.get("/healthz")
+def health_check(session: Session = Depends(get_session)):
+    """Readiness check: is the app actually able to serve real requests.
+    Deployment platforms should route traffic / restart on this, not on
+    `/`, since a process that's up but can't reach Postgres isn't ready."""
+    try:
+        session.exec(select(1))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
     return {"status": "ok"}
