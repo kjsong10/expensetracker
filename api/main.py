@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from auth import SESSION_SECRET_KEY
-from database import init_db
 from ml.classifier import train_classifier
 from routers import auth, plaid, transactions
 
@@ -55,7 +54,8 @@ app.include_router(plaid.router)
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    # Schema is managed by Alembic migrations (`alembic upgrade head`), run
+    # before the app starts - see docs/ARCHITECTURE.md §3.4.
     train_classifier()
 
 
